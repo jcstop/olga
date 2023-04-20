@@ -10,34 +10,39 @@ created
 %}
 
 
-function app_filter_signal()
+function app_process_abf()
     
     clc();
     
     % desired low-pass cutoff frequency
     p.lowpass_fc = 0.5;
     
-    % file analyze
-    %p.fname = "c:\ejimsve\private\olga\21819010.abf";
-    %p.fname = "C:\Users\olne0992\Desktop\21819010.abf";
-    p.fname = "d:\olga\abf\21n09002.abf";
+    % select file to analyze
+    p.fname = "c:\ejimsve\data\olga\abf\21n09002.abf";
+    %p.fname = "c:\ejimsve\data\olga\abf\22224007.abf";
+    
     
         
-    % analyze segment 1
-    p.time_start  =  0;
-    p.time_length = 35;
+    %% analyze segment 1
+    p.time_start  =  25;
+    p.time_length = 138;
     p.segment_nr  = 1;
-    p.channel_nr  = 3;
+    p.channel_nr  = 1;
     s1 = analyze_segment(p);
     
-    % analyze segment 2
-    p.time_start  = 460;
+    %% analyze segment 2
+    p.time_start  = 0;
     p.time_length = 90;
     p.segment_nr  = 2;
-    p.channel_nr  = 3;
+    p.channel_nr  = 1;
     s2 = analyze_segment(p);
+   
+    %
+    compare_two_segments(s1, s2)
+end
     
-    
+
+function compare_two_segments(s1, s2)
     
     %% compare filtered signal
     figure(900);
@@ -113,7 +118,7 @@ function app_filter_signal()
     hold on;
     plot(s2.diff_min_idxes, s2.diff_min_values, '.-', "color", [1 0 0], "DisplayName", "Segment 2");
     plot(s2.diff_min_idxes([1 end]), s2.diff_min_avg * [1 1], '--', "color", [1 0 0], "DisplayName", "Segment 2 (avg)");
-    s2
+    
     
     grid on;
     title("Derivative min values");
@@ -130,6 +135,10 @@ end
 
 function o = analyze_segment(p)
     
+    % create output folder
+    [~, ~] = mkdir("out");
+
+    %
     time_start  = p.time_start;
     time_length = p.time_length;
         
@@ -155,16 +164,7 @@ function o = analyze_segment(p)
     %% create time array
     t_raw = (1/fs) * (0:N_raw-1).';
     
-    
-    %% generate known signal for testing
-    if 0
-        A = 10;
-        f = 0.3;
-        x_raw = -40 + A * sin(2*pi*f*t_raw);
-        
-        x_prim_max_theory = A * 2*pi*f
-    end
-    
+            
     % keep track of total delay for decimated and filtered signal
     delay = 0;
     
@@ -179,12 +179,10 @@ function o = analyze_segment(p)
         R = 5;
         
         x_dec = decimate(x_dec, R, "FIR");
-        %delay = delay  + 1/fs*30/2;
         fs2 = fs2/R;
     end
     
-    %diff_dec_max = max(diff(x_dec) * fs2)
-    
+        
     %% time for decimated samples
     N_dec = numel(x_dec);
     t_dec = (1/fs2) * (0:N_dec-1).';
@@ -206,12 +204,17 @@ function o = analyze_segment(p)
         delay = delay + (M/2) * 1/fs2;
     end
     
-    %diff_filt_max = max(diff(x_filt(100:end)) * fs2)
-    
+        
     %% time for filtered samples
     N_filt = numel(x_filt);
     t_filt = (1/fs2) * (0:N_filt-1).';
     t_filt = t_filt - delay;
+
+
+    %% remove transient from filtered signal
+    N_trans = 100;
+    t_filt = t_filt(1 + N_trans : end);
+    x_filt = x_filt(1 + N_trans : end);
     
     
     %% differentiator to calc deriviative
@@ -239,27 +242,48 @@ function o = analyze_segment(p)
     %% remove transient
     
     % number of initial samples to skip
-    num_trans = 100;
+    num_trans_samples = 100;
     
     % remove the samples
-    t_diff = t_diff(1 + num_trans : end);
-    x_diff = x_diff(1 + num_trans : end);
+    t_diff = t_diff(1 + num_trans_samples : end);
+    x_diff = x_diff(1 + num_trans_samples : end);
     
-    
-    %diff_diff_max = max(x_diff(100:end))
-    
+            
     %% print some info
-    fprintf("Original sample rate = %.0f Hz\n", fs);
+    fprintf("Original sample rate  = %.0f Hz\n", fs);
     fprintf("Decimated sample rate = %.0f Hz\n", fs2);
     
 
 
-    %%
-    %[filt_max_values, filt_max_times] = findpeaks(+x_filt, t_filt, "MinPeakProminence", 10);
-    %x_filt_at_max = interp1(t_filt, x_filt, diff_max_times);
 
 
 
+    %% find dips in filtered data
+    [filt_min_values, filt_min_times] = findpeaks(-x_filt, t_filt, "MinPeakProminence", 10);
+    filt_min_values = -filt_min_values;
+
+    %% find peaks in filtered data
+    [filt_max_values, filt_max_times] = findpeaks(+x_filt, t_filt, "MinPeakProminence", 10);
+    
+
+    %% make sure the first point is a dip
+    if filt_min_times(1) > filt_max_times(1)
+        % remove first peak
+        filt_max_times  = filt_max_times(2:end);
+        filt_max_values = filt_max_values(2:end);
+    end
+    
+    %% make sure last point is a peak
+    if filt_min_times(end) > filt_max_times(end)
+        % remove last dip
+        filt_min_times = filt_min_times(1:end-1);
+        filt_min_values = filt_min_values(1:end-1);
+    end
+    
+    %% calc amplitudes
+    filt_amp = filt_max_values - filt_min_values;
+
+    
     
     %% find peak of derivative
     [diff_max_values, diff_max_times] = findpeaks(+x_diff, t_diff, "MinPeakProminence", 10);
@@ -279,8 +303,31 @@ function o = analyze_segment(p)
     num_min = numel(diff_min_values);
     diff_min_idxes = (1:num_min).';
     diff_min_avg = mean(diff_min_values);
+
+
+    %% ====================== save csv files ===========================
+
+    % dips, peaks and amplitudes of filtered data
+    data = [filt_min_times filt_min_values filt_max_values filt_amp];
+    fname = sprintf("out/dips_peak_amp_segment_%d.csv", p.segment_nr);
+    writematrix(data, fname);
+
+
+
+    % max derivative points
+    data = [diff_max_idxes diff_max_values];
+    fname = sprintf("out/derivative_max_segment_%d.csv", p.segment_nr);
+    writematrix(data, fname);
+
+    % min derivative points
+    data = [diff_min_idxes diff_min_values];
+    fname = sprintf("out/derivative_min_segment_%d.csv", p.segment_nr);
+    writematrix(data, fname);
+
+
     
-    %% outputs
+    %% ================ outputs =====================
+
     o.diff_max_idxes  = diff_max_idxes;
     o.diff_max_values = diff_max_values;
     o.diff_max_avg    = diff_max_avg;
@@ -295,6 +342,12 @@ function o = analyze_segment(p)
     o.t_diff = t_diff;
     o.x_diff = x_diff;
     
+
+    
+
+
+    %% ================== plots ==============================
+
     
     %% plot raw + decimated
     figure(100 + p.segment_nr);
@@ -332,7 +385,8 @@ function o = analyze_segment(p)
 
     
     
-    %% plot decimated + filtered
+    %% =================== plot decimated + filtered ===============
+
     figure(200 + p.segment_nr);
     tiledlayout(1, 1, "Tilespacing", "Compact", "Padding", "Compact");
     nexttile();
@@ -358,14 +412,22 @@ function o = analyze_segment(p)
     title(str);
     set(gcf(), "Name", "Decimated and filtered");
 
-    %% plot peaks
-    %hold on
-    %plot(filt_max_times, x_dec_at_max, '.', "color", [1 0 0], "markersize", 20, "DisplayName", "Max slope");
+    %% plot dips
+    hold on
+    plot(filt_min_times, filt_min_values, '.', "color", [0 1 0], "markersize", 20, "DisplayName", "Dip");
+
+    % plot peaks
+    plot(filt_max_times, filt_max_values, '.', "color", [1 0 0], "markersize", 20, "DisplayName", "Peak");
+
+
+
+
+
 
 
         
     
-    %% plot derivative
+    %% ============= plot derivative ====================== 
     figure(300);
     tiledlayout(1, 1, "Tilespacing", "Compact", "Padding", "Compact");
     nexttile();
@@ -407,10 +469,7 @@ function o = analyze_segment(p)
     set(gcf(), "Name", "Peak derivative values");
 
 
-    %% write csv file
-    data = [diff_max_idxes diff_max_values];
-    fname = sprintf("derivative_max_segment_%d.csv", p.segment_nr);
-    writematrix(data, fname);
+    
     
     
     %% plot dip derivative values
@@ -433,10 +492,7 @@ function o = analyze_segment(p)
     set(gcf(), "Name", "Dip derivative values");
     
     
-    %% write csv file
-    data = [diff_min_idxes diff_min_values];
-    fname = sprintf("derivative_min_segment_%d.csv", p.segment_nr);
-    writematrix(data, fname);
+    
    
   
     
