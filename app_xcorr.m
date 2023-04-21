@@ -10,7 +10,7 @@ created
 %}
 
 
-%function app_process_abf()
+%function app_xcorr()
     
     clc();
     
@@ -25,7 +25,7 @@ created
     
         
     %% analyze segment 1
-    p.time_start  = 00;
+    p.time_start  = 0;
     p.time_length = 300;
     p.segment_nr  = 1;
     p.channel_nr  = 1;
@@ -33,9 +33,9 @@ created
     
     %% analyze segment 2
     p.time_start  = 0;
-    p.time_length = 90;
+    p.time_length = 300;
     p.segment_nr  = 2;
-    p.channel_nr  = 1;
+    p.channel_nr  = 3;
     s2 = analyze_segment(p);
    
     %
@@ -337,6 +337,9 @@ function o = analyze_segment(p)
     o.diff_min_idxes  = diff_min_idxes;
     o.diff_min_values = diff_min_values;
     o.diff_min_avg    = diff_min_avg;
+
+    o.t_raw = t_raw;
+    o.x_raw = x_raw;
     
     o.t_filt = t_filt;
     o.x_filt = x_filt;
